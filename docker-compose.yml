@@ -49,6 +49,7 @@ services:
       - mynetwork
     volumes:
       - db_data:/var/lib/mysql  # Persist MySQL data
+      - ./backend/src/main/resources/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
     command: --default-authentication-plugin=mysql_native_password  # Use the native password plugin
 
 networks:
