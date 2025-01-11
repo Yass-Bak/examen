@@ -13,7 +13,7 @@ RUN npm run build --prod
 
 # Serve with NGINX
 FROM nginx:1.21
-COPY --from=build /app/dist/Spike /usr/share/nginx/html
+COPY --from=build /app/dist/angular-14-crud-example /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/nginx.conf
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
