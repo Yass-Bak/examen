@@ -2,11 +2,11 @@ pipeline {
     agent any
 
     environment {
-        DOCKERHUB_USERNAME = 'yasinbk'  // Replace with your Docker Hub username
-        DOCKERHUB_PASSWORD = credentials('dockerhub-credentials')  // Correct credential ID for Docker Hub password
-        VM2_USER = 'vagrant'           // Replace with VM2 SSH user
-        VM2_IP = '192.168.43.203'     // Replace with VM2 IP address
-        VM2_APP_PATH = '~/app'        // Directory on VM2 to deploy
+        DOCKERHUB_USERNAME = 'yasinbk'   // Replace with your Docker Hub username
+        DOCKERHUB_PASSWORD = credentials('dockerhub-credentials')  // Docker Hub credentials in Jenkins
+        VM2_USER = 'vagrant'           // SSH user for the remote VM
+        VM2_IP = '192.168.43.203'      // Remote VM IP address
+        VM2_APP_PATH = '~/app'         // Directory on the remote VM
         DOCKER_CLI_EXPERIMENTAL = "enabled"
     }
 
@@ -17,29 +17,23 @@ pipeline {
             }
         }
 
-        stage('Build Docker Images') {
+        stage('Build Backend Docker Image') {
             steps {
-                sh 'docker-compose build'
+                dir('backend') {
+                    sh '''
+                    docker build -t $DOCKERHUB_USERNAME/backend:$(git rev-parse --short HEAD) .
+                    '''
+                }
             }
         }
 
-        stage('Run Backend Tests') {
+        stage('Build Frontend Docker Image') {
             steps {
-                sh '''
-                docker-compose up -d
-                docker-compose exec -T backend  
-                docker-compose down
-                '''
-            }
-        }
-
-        stage('Run Frontend Tests') {
-            steps {
-                sh '''
-                docker-compose up -d
-                docker-compose exec frontend 
-                docker-compose down
-                '''
+                dir('frontend') {
+                    sh '''
+                    docker build -t $DOCKERHUB_USERNAME/frontend:$(git rev-parse --short HEAD) .
+                    '''
+                }
             }
         }
 
@@ -47,7 +41,10 @@ pipeline {
             steps {
                 script {
                     docker.withRegistry('https://index.docker.io/v1/', 'dockerhub-credentials') {
-                        sh 'docker-compose push'
+                        sh '''
+                        docker push $DOCKERHUB_USERNAME/backend:$(git rev-parse --short HEAD)
+                        docker push $DOCKERHUB_USERNAME/frontend:$(git rev-parse --short HEAD)
+                        '''
                     }
                 }
             }
@@ -57,30 +54,31 @@ pipeline {
             steps {
                 sshagent(['vm2-ssh-credentials']) {
                     sh '''
-                    # Create the app directory on the remote machine
+                    # Create the application directory on the remote machine
                     ssh -o StrictHostKeyChecking=no $VM2_USER@$VM2_IP "mkdir -p $VM2_APP_PATH"
-        
+
                     # Copy the docker-compose.yml file
                     scp docker-compose.yml $VM2_USER@$VM2_IP:$VM2_APP_PATH/
-        
-                    # Copy the backend and frontend directories
-                    scp -r backend frontend $VM2_USER@$VM2_IP:$VM2_APP_PATH/
-        
-                    # Execute Docker Compose on the remote machine
+
+                    # Update docker-compose.yml to use images from Docker Hub
+                    ssh -o StrictHostKeyChecking=no $VM2_USER@$VM2_IP "sed -i 's|context: ./backend|image: $DOCKERHUB_USERNAME/backend:$(git rev-parse --short HEAD)|' $VM2_APP_PATH/docker-compose.yml"
+                    ssh -o StrictHostKeyChecking=no $VM2_USER@$VM2_IP "sed -i 's|context: ./frontend|image: $DOCKERHUB_USERNAME/frontend:$(git rev-parse --short HEAD)|' $VM2_APP_PATH/docker-compose.yml"
+
+                    # Deploy the application on the remote VM
                     ssh -o StrictHostKeyChecking=no $VM2_USER@$VM2_IP "
                         cd $VM2_APP_PATH &&
                         sudo docker-compose pull &&
-                        sudo docker-compose up -d --build
+                        sudo docker-compose up -d
                     "
                     '''
                 }
             }
-}
+        }
     }
 
     post {
         always {
-                cleanWs()            
+            cleanWs()
         }
     }
 }
