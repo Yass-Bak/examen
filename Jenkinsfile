@@ -35,7 +35,7 @@ services:
     container_name: mysql_db
     environment:
       MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: bankdb
+      MYSQL_DATABASE: testdb
       MYSQL_USER: user1
       MYSQL_PASSWORD: user1
     healthcheck:
